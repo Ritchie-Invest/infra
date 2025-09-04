@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_staging
+    restart: unless-stopped
+    env_file:
+      - staging/db.env
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - staging
+
+  api:
+    image: misterazix/ritchie-invest-api:${API_TAG:-develop}
+    container_name: api_staging
+    restart: unless-stopped
+    env_file:
+      - staging/api.env
+      - staging/db.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - staging
+
+  admin:
+    image: misterazix/ritchie-invest-admin:${ADMIN_TAG:-develop}
+    container_name: admin_staging
+    restart: unless-stopped
+    env_file:
+      - staging/admin.env
+    depends_on:
+      - api
+    networks:
+      - staging
+
+networks:
+  staging:
+    name: staging
+
+volumes:
+  pgdata_staging:
+    driver: local

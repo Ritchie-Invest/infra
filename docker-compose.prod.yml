@@ -1,0 +1,50 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16
+    container_name: postgres_prod
+    restart: unless-stopped
+    env_file:
+      - production/db.env
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - prod
+
+  api:
+    image: misterazix/ritchie-invest-api:${API_TAG:-latest}
+    container_name: api_prod
+    restart: unless-stopped
+    env_file:
+      - production/api.env
+      - production/db.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - prod
+
+  admin:
+    image: misterazix/ritchie-invest-admin:${ADMIN_TAG:-latest}
+    container_name: admin_prod
+    restart: unless-stopped
+    env_file:
+      - production/admin.env
+    depends_on:
+      - api
+    networks:
+      - prod
+
+networks:
+  prod:
+    name: prod
+
+volumes:
+  pgdata_prod:
+    driver: local
