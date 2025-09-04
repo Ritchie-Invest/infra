@@ -29,6 +29,13 @@ services:
         condition: service_healthy
     networks:
       - prod
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api-prod.rule=Host(`api.ritchie-invest.fr`)
+      - traefik.http.routers.api-prod.entrypoints=websecure
+      - traefik.http.routers.api-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.api-prod.loadbalancer.server.port=8080
 
   admin:
     image: misterazix/ritchie-invest-admin:${ADMIN_TAG:-latest}
@@ -40,10 +47,19 @@ services:
       - api
     networks:
       - prod
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.admin-prod.rule=Host(`admin.ritchie-invest.fr`)
+      - traefik.http.routers.admin-prod.entrypoints=websecure
+      - traefik.http.routers.admin-prod.tls.certresolver=letsencrypt
+      - traefik.http.services.admin-prod.loadbalancer.server.port=8080
 
 networks:
   prod:
     name: prod
+  traefik:
+    external: true
 
 volumes:
   pgdata_prod:

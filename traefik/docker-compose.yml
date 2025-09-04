@@ -1,0 +1,47 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      # (Optionnel) rediriger HTTP->HTTPS automatiquement
+      - --entrypoints.web.http.redirections.entryPoint.to=websecure
+      - --entrypoints.web.http.redirections.entryPoint.scheme=https
+      # Dashboard sécurisé (désactivé par défaut)
+      - --api.dashboard=true
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_letsencrypt:/letsencrypt
+    networks:
+      - traefik
+    labels:
+      # Activer Traefik pour ce service
+      - traefik.enable=true
+      # (Optionnel) Exposer le dashboard derrière un host dédié
+      # - traefik.http.routers.traefik.rule=Host(`traefik.ritchie-invest.fr`)
+      # - traefik.http.routers.traefik.entrypoints=websecure
+      # - traefik.http.routers.traefik.tls.certresolver=letsencrypt
+      # - traefik.http.routers.traefik.service=api@internal
+
+volumes:
+  traefik_letsencrypt:
+    driver: local
+
+networks:
+  traefik:
+    name: traefik

@@ -29,6 +29,13 @@ services:
         condition: service_healthy
     networks:
       - staging
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.api-staging.rule=Host(`api-staging.ritchie-invest.fr`)
+      - traefik.http.routers.api-staging.entrypoints=websecure
+      - traefik.http.routers.api-staging.tls.certresolver=letsencrypt
+      - traefik.http.services.api-staging.loadbalancer.server.port=8080
 
   admin:
     image: misterazix/ritchie-invest-admin:${ADMIN_TAG:-develop}
@@ -40,10 +47,19 @@ services:
       - api
     networks:
       - staging
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.admin-staging.rule=Host(`admin-staging.ritchie-invest.fr`)
+      - traefik.http.routers.admin-staging.entrypoints=websecure
+      - traefik.http.routers.admin-staging.tls.certresolver=letsencrypt
+      - traefik.http.services.admin-staging.loadbalancer.server.port=8080
 
 networks:
   staging:
     name: staging
+  traefik:
+    external: true
 
 volumes:
   pgdata_staging:
