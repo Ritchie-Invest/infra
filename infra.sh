@@ -15,7 +15,6 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 
 compose() {
-  # Wrapper (docker compose v2)
   docker compose "$@"
 }
 
@@ -61,29 +60,29 @@ check_env_files() {
 up_traefik() {
   title "Traefik";
   check_acme || return 1
-  compose -f "$TRAEFIK_FILE" up -d --pull always
+  compose -p ritchie-proxy -f "$TRAEFIK_FILE" up -d --pull always
   ok "Traefik started"
 }
 
 up_staging() {
   title "Staging";
   check_env_files staging || return 1
-  compose --env-file "$ENV_FILE" -f "$STAGING_FILE" up -d --pull always
+  compose -p ritchie-staging --env-file "$ENV_FILE" -f "$STAGING_FILE" up -d --pull always
   ok "Staging started"
 }
 
 up_prod() {
   title "Production";
   check_env_files prod || return 1
-  compose --env-file "$ENV_FILE" -f "$PROD_FILE" up -d --pull always
+  compose -p ritchie-prod --env-file "$ENV_FILE" -f "$PROD_FILE" up -d --pull always
   ok "Production started"
 }
 
 pull_all() {
   title "Pull images";
-  compose -f "$TRAEFIK_FILE" pull
-  compose -f "$STAGING_FILE" pull
-  compose -f "$PROD_FILE" pull
+  compose -p ritchie-proxy -f "$TRAEFIK_FILE" pull
+  compose -p ritchie-staging -f "$STAGING_FILE" pull
+  compose -p ritchie-prod -f "$PROD_FILE" pull
   ok "Images updated"
 }
 
@@ -95,14 +94,14 @@ logs() {
 
 restart_service() {
   local env=$1 svc=$2
-  local file
+  local file proj
   case $env in
-    prod) file=$PROD_FILE; check_env_files prod || return 1 ;;
-    staging) file=$STAGING_FILE; check_env_files staging || return 1 ;;
+    prod) file=$PROD_FILE; proj=ritchie-prod ;;
+    staging) file=$STAGING_FILE; proj=ritchie-staging ;;
     *) err "unknown env (prod|staging)"; return 1;;
   esac
   title "Restart $svc ($env)"
-  compose -f "$file" up -d --pull always "$svc"
+  compose -p "$proj" -f "$file" up -d --pull always "$svc"
   ok "Service $svc redeployed"
 }
 
