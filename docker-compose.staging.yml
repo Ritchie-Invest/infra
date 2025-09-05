@@ -32,6 +32,7 @@ services:
       - traefik
     labels:
       - traefik.enable=true
+      - traefik.docker.network=traefik
       - traefik.http.routers.api-staging.rule=Host(`api-staging.ritchie-invest.fr`)
       - traefik.http.routers.api-staging.entrypoints=websecure
       - traefik.http.routers.api-staging.tls.certresolver=letsencrypt
@@ -50,6 +51,7 @@ services:
       - traefik
     labels:
       - traefik.enable=true
+      - traefik.docker.network=traefik
       - traefik.http.routers.admin-staging.rule=Host(`admin-staging.ritchie-invest.fr`)
       - traefik.http.routers.admin-staging.entrypoints=websecure
       - traefik.http.routers.admin-staging.tls.certresolver=letsencrypt
