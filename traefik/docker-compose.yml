@@ -14,10 +14,24 @@ services:
       - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
       - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
       - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
-      # (Optionnel) rediriger HTTP->HTTPS automatiquement
+      # ---- HTTP to HTTPS ----
       - --entrypoints.web.http.redirections.entryPoint.to=websecure
       - --entrypoints.web.http.redirections.entryPoint.scheme=https
-      # Dashboard sécurisé (désactivé par défaut)
+      # ---- Logs ----
+      - --log.level=INFO              # (DEBUG, WARN, ERROR)
+      - --log.format=json             # json ou common
+      - --accesslog=true
+      - --accesslog.format=json
+      - --accesslog.bufferingsize=50  # flush après 50 lignes (stdout)
+      # Garder tous les headers (sinon filtrer via accesslog.fields.*)
+      - --accesslog.fields.defaultmode=keep
+      - --accesslog.fields.headers.defaultmode=keep
+      # Pour écrire dans des fichiers (décommenter + volume logs)
+      # - --log.filepath=/var/log/traefik/traefik.log
+      # - --accesslog.filepath=/var/log/traefik/access.log
+      # - --accesslog.bufferingsize=0   # flush immédiat en mode fichier
+      # ----------------
+      # Dashboard
       - --api.dashboard=true
     ports:
       - "80:80"
@@ -27,6 +41,8 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - traefik_letsencrypt:/letsencrypt
+      # Pour logs fichier (si activé ci-dessus)
+      # - traefik_logs:/var/log/traefik
     networks:
       - traefik
     labels:
@@ -41,6 +57,8 @@ services:
 volumes:
   traefik_letsencrypt:
     driver: local
+  # traefik_logs:
+  #   driver: local
 
 networks:
   traefik:
