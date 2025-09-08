@@ -105,6 +105,47 @@ restart_service() {
   ok "Service $svc redeployed"
 }
 
+# Prompt for a secret twice (hidden) and export value via variable indirection
+prompt_secret() {
+  local label=${1:-Password} outvar=$2 p1 p2
+  read -s -p "$label: " p1; echo
+  read -s -p "Confirm $label: " p2; echo
+  if [[ "$p1" != "$p2" ]]; then
+    err "Passwords do not match"; return 1
+  fi
+  printf -v "$outvar" '%s' "$p1"
+}
+
+# Create / ensure a superadmin by running the CLI script inside the API container
+# Usage: ./infra.sh create-superadmin <env> <email>
+# Optional env var: API_SUPERADMIN_CMD (default: node dist/cli/bootstrap-superadmin.js)
+create_superadmin() {
+  local env=$1 email=$2
+  if [[ -z "${env:-}" || -z "${email:-}" ]]; then
+    err "Usage: ./infra.sh create-superadmin <env> <email>"; return 1
+  fi
+  local file proj
+  case $env in
+    prod|production) file=$PROD_FILE; proj=ritchie-prod ;;
+    staging) file=$STAGING_FILE; proj=ritchie-staging ;;
+    *) err "unknown env (prod|staging)"; return 1;;
+  esac
+
+  local cmd="${API_SUPERADMIN_CMD:-node dist/cli/bootstrap-superadmin.js}"
+  local password
+  prompt_secret "Superadmin password" password || return 1
+
+  title "Ensure superadmin ($email) on $env"
+  if ! SUPERADMIN_EMAIL="$email" SUPERADMIN_PASSWORD="$password" \
+      compose -p "$proj" -f "$file" run --rm --entrypoint "" \
+        -e SUPERADMIN_EMAIL -e SUPERADMIN_PASSWORD api \
+        sh -lc "$cmd"; then
+    err "Superadmin creation failed"
+    return 1
+  fi
+  ok "Superadmin ensured"
+}
+
 usage() {
   cat <<EOF
 Usage: ./infra.sh <command>
@@ -117,6 +158,11 @@ Commands:
   restart <env> <svc>    Redeploy a service (env=prod|staging)
   logs <container>       Follow container logs
   check [env]            Verify prerequisites & env files (env=prod|staging|all, default=all)
+  create-superadmin <env> <email>
+                         Run superadmin bootstrap CLI inside api container
+
+Env vars:
+  API_SUPERADMIN_CMD     Override CLI command (default: node dist/cli/bootstrap-superadmin.js)
 
 Examples:
   ./infra.sh up:traefik
@@ -124,6 +170,7 @@ Examples:
   ./infra.sh restart prod api
   ./infra.sh check staging
   ./infra.sh logs traefik
+  ./infra.sh create-superadmin staging admin@example.com
 EOF
 }
 
@@ -138,6 +185,7 @@ main() {
     restart) shift; restart_service "$@" ;;
     logs) shift; logs "$@" ;;
     check) shift; check_acme && check_env_files "${1:-all}" && ok "Checks OK" ;;
+    create-superadmin) shift; create_superadmin "$@" ;;
     -h|--help|help|"") usage ;;
     *) err "Unknown command"; usage; exit 1 ;;
   esac
