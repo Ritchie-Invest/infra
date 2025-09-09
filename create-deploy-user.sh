@@ -42,6 +42,11 @@ SSHD_CONFIG=${SSHD_CONFIG:-/etc/ssh/sshd_config}
 FORCE_COMMAND=${FORCE_COMMAND:-}
 UMASK_HOME=${UMASK_HOME:-0750}
 DRY_RUN=${DRY_RUN:-false}
+DEBUG=${DEBUG:-false}
+
+if [[ $DEBUG == true ]]; then
+  set -x
+fi
 
 log() { echo -e "\033[1;32m[INFO]\033[0m $*"; }
 warn() { echo -e "\033[1;33m[WARN]\033[0m $*"; }
@@ -118,13 +123,25 @@ else
   log "Adding SSH key"
   local_line="$DEPLOY_PUBKEY"
   if [[ -n $FORCE_COMMAND ]]; then
-    # Basic quotes escaping
+    # Échappement correct des guillemets doubles
     esc_cmd=${FORCE_COMMAND//"/\\"}
     local_line="command=\"$esc_cmd\",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding $DEPLOY_PUBKEY"
   fi
-  run bash -c "echo '$local_line' >> '$AUTH_KEYS'"
-  run chown "$DEPLOY_USER:$DEPLOY_GROUP" "$AUTH_KEYS"
-  run chmod 600 "$AUTH_KEYS"
+  if [[ $DRY_RUN == true ]]; then
+    echo "DRY_RUN: would append key to $AUTH_KEYS"
+  else
+    # Utiliser printf pour éviter surprises avec echo
+    if ! printf '%s\n' "$local_line" >> "$AUTH_KEYS"; then
+      err "Failed to write key to $AUTH_KEYS"; exit 1
+    fi
+    chown "$DEPLOY_USER:$DEPLOY_GROUP" "$AUTH_KEYS" || { err "chown failed"; exit 1; }
+    chmod 600 "$AUTH_KEYS" || { err "chmod failed"; exit 1; }
+    # Vérification immédiate
+    if ! grep -Fq "$KEY_PREFIX" "$AUTH_KEYS"; then
+      err "Key append verification failed (not found after write)"; exit 1
+    fi
+    log "SSH key appended successfully"
+  fi
 fi
 
 # Optional sudoers
@@ -145,30 +162,39 @@ fi
 
 # SSH hardening (in-place modification)
 modify_sshd_config() {
-  local key=$1 value=$2 file=$3
-  if grep -Eq "^#?${key}\\b" "$file"; then
-    run sed -i "s%^#\\?${key}.*%${key} ${value}%" "$file"
+  local key=$1 value=$2 file=$3 tmp
+  [[ -f $file ]] || { err "sshd_config not found at $file"; return 1; }
+  # Utilise une substitution plus tolérante aux espaces / commentaires
+  if grep -Eq "^[#[:space:]]*${key}\\b" "$file"; then
+    tmp=$(mktemp)
+    if ! sed -E "s|^[#[:space:]]*${key}\\b.*|${key} ${value}|" "$file" > "$tmp"; then
+      err "sed replacement failed for $key"; rm -f "$tmp"; return 1
+    fi
+    mv "$tmp" "$file"
   else
-    run bash -c "echo '${key} ${value}' >> '$file'"
+    printf '%s %s\n' "$key" "$value" >> "$file" || { err "Failed to append $key to $file"; return 1; }
   fi
 }
 
-RESTART_SSHD=false
+RESTART_SSH=false
 if [[ $DISABLE_ROOT_LOGIN == true ]]; then
   log "Disabling root SSH login"
-  modify_sshd_config PermitRootLogin no "$SSHD_CONFIG"; RESTART_SSHD=true
+  modify_sshd_config PermitRootLogin no "$SSHD_CONFIG"; RESTART_SSH=true
 fi
 if [[ $DISABLE_PASSWORD_AUTH == true ]]; then
   log "Disabling SSH password authentication"
-  modify_sshd_config PasswordAuthentication no "$SSHD_CONFIG"; RESTART_SSHD=true
+  modify_sshd_config PasswordAuthentication no "$SSHD_CONFIG"; RESTART_SSH=true
 fi
 
-if [[ $RESTART_SSHD == true ]]; then
+if [[ $RESTART_SSH == true ]]; then
   if command -v systemctl >/dev/null; then
-    log "Reloading sshd"
-    run systemctl reload sshd || run systemctl restart sshd
+    log "Reloading ssh"
+    if ! systemctl reload ssh 2>/dev/null; then
+      warn "Reload failed, attempting restart"
+      systemctl restart ssh || { err "ssh restart failed"; exit 1; }
+    fi
   else
-    warn "systemctl not available – manual sshd restart required"
+    warn "systemctl not available – manual ssh restart required"
   fi
 fi
 
